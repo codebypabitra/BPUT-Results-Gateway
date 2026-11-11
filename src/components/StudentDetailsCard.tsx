@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BputStudentDetails } from '../types/bput';
-import { Share2, Check, Copy, UserCheck, ShieldCheck, GraduationCap } from 'lucide-react';
+import { Share2, Check, Copy, UserCheck, ShieldCheck, MessageCircle } from 'lucide-react';
 
 interface StudentDetailsCardProps {
   student: BputStudentDetails;
@@ -23,13 +23,20 @@ export const StudentDetailsCard: React.FC<StudentDetailsCardProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleWhatsAppShare = () => {
+    const currentUrl = window.location.href;
+    const shareText = `🎓 *BPUT Provisional Result Record*\n*Student:* ${student.studentName}\n*Reg No:* ${student.rollNo}\n*Institute:* ${student.collegeName}\n*Branch:* ${student.branchName}\n${semesterName ? `*Semester:* ${semesterName}\n` : ''}${examSession ? `*Session:* ${examSession}\n` : ''}🔗 *Check Marksheet Online:*\n${currentUrl}`;
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <section
       className="bg-white rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all overflow-hidden"
       data-purpose="student-bio-card"
       id="grade-details"
     >
-      <div className="border-b border-slate-100 bg-slate-50/70 px-5 sm:px-7 py-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="border-b border-slate-100 bg-slate-50/70 px-5 sm:px-7 py-3.5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200/60 flex items-center justify-center text-emerald-700 shadow-xs">
             <UserCheck className="w-4 h-4 stroke-[2.2]" />
@@ -38,21 +45,34 @@ export const StudentDetailsCard: React.FC<StudentDetailsCardProps> = ({
             <h3 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight leading-tight">
               Student Academic Profile
             </h3>
-            <p className="text-[11px] font-medium text-slate-500">Official BPUT University Provisional Record</p>
+            <p className="text-[11px] font-medium text-slate-500">Official University Provisional Record</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-2 no-print">
+          {/* WhatsApp Direct Share Button */}
+          <button
+            type="button"
+            onClick={handleWhatsAppShare}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] border border-[#25D366]/30 rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+            title="Share verified result directly to WhatsApp study groups"
+          >
+            <MessageCircle className="w-3.5 h-3.5 fill-[#25D366] text-[#25D366]" />
+            <span className="hidden sm:inline">WhatsApp</span>
+          </button>
+
           {onShare && (
             <button
               type="button"
               onClick={onShare}
-              className="no-print inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200 hover:border-emerald-200 rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200 hover:border-emerald-200 rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer"
               title="Share unique link to this student result"
             >
               <Share2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Share Result</span>
+              <span>Share Link</span>
             </button>
           )}
+
           <span className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-xs select-none">
             <ShieldCheck className="w-3.5 h-3.5" />
             Verified Record
@@ -68,7 +88,7 @@ export const StudentDetailsCard: React.FC<StudentDetailsCardProps> = ({
               Registration No.
             </span>
             <div className="sm:col-span-9 flex items-center gap-2.5">
-              <span className="font-mono font-bold text-lg text-emerald-700 tracking-wider bg-emerald-50/80 px-3 py-1 rounded-xl border border-emerald-200/70 shadow-xs">
+              <span className="font-mono font-bold text-lg text-emerald-700 tracking-wider bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200/70 shadow-xs">
                 {student.rollNo}
               </span>
               <button
@@ -114,7 +134,7 @@ export const StudentDetailsCard: React.FC<StudentDetailsCardProps> = ({
               Branch / Degree
             </span>
             <span className="sm:col-span-9 font-bold text-sm sm:text-base text-slate-900 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
               <span>{student.branchName}</span>
             </span>
           </div>

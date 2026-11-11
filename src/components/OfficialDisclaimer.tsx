@@ -3,7 +3,7 @@ import { AlertTriangle, ShieldCheck, GraduationCap, ExternalLink, Sparkles } fro
 
 export const OfficialDisclaimer: React.FC = () => {
   return (
-    <footer className="mt-14 space-y-6 no-print font-sans" data-purpose="disclaimer-statement">
+    <footer className="w-full mt-10 space-y-6 no-print font-sans" data-purpose="disclaimer-statement">
       {/* Header block */}
       <div className="text-center max-w-2xl mx-auto flex flex-col items-center">
         <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 text-xs font-bold px-3.5 py-1.5 rounded-full border border-emerald-200/70 mb-3 shadow-xs select-none">
@@ -18,7 +18,7 @@ export const OfficialDisclaimer: React.FC = () => {
         </p>
       </div>
 
-      <div className="space-y-5 max-w-5xl mx-auto">
+      <div className="w-full space-y-5">
         {/* Core Disclaimer */}
         <div className="bg-amber-50/70 border border-amber-200/80 p-6 sm:p-7 rounded-3xl shadow-xs">
           <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start text-center sm:text-left">

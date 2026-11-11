@@ -459,9 +459,9 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main Content Container */}
+      {/* Main Content Container with 5% left-right margin/padding */}
       <main
-        className="grow max-w-7xl w-full mx-auto px-4 sm:px-6 pt-6 pb-10 space-y-6"
+        className="grow w-full max-w-full px-[5%] mx-0 pt-4 pb-10 space-y-6"
         data-purpose="main-result-container"
       >
         {/* Title Header Banner with Official University Logo & JugaadBro Aesthetic */}

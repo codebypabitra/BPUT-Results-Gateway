@@ -816,9 +816,28 @@ export const BulkResultChecker: React.FC<BulkResultCheckerProps> = ({
               </div>
             </div>
 
-            <p className="text-xs text-slate-500 font-medium">
-              Each registration number from start to end will be queried individually in real-time.
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <p className="text-xs text-slate-500 font-medium">
+                Each registration number from start to end will be queried individually in real-time.
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider select-none">Quick Batch:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRangeStart('2101289121');
+                    setRangeEnd('2101289125');
+                    if (session === 'default_option') {
+                      setSession('Even-(2024-25)');
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80 transition-all cursor-pointer shadow-xs"
+                  title="Load sample roll range 2101289121 to 2101289125"
+                >
+                  <span>2101289121 – 2101289125</span>
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

@@ -33,8 +33,8 @@ export const Header: React.FC = () => {
   const isOnline = health.status === 'online' || health.status === 'degraded' || health.status === 'checking';
 
   return (
-    <header className="bg-white border-b border-slate-200/90 shadow-xs no-print sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-3.5 sm:px-6 py-2.5 sm:py-3.5">
+    <header className="w-full bg-white border-b border-slate-200/90 shadow-xs no-print sticky top-0 z-40">
+      <div className="w-full px-[5%] py-2 sm:py-2.5">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
           {/* Brand Left Section */}
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">

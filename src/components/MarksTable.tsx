@@ -1,7 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { BputMarksData, BputStudentDetails, classifyBacklogGrade } from '../types/bput';
 import { generateStudentMarksheetPdf } from '../services/pdfGenerator';
-import { Check, Download, Printer, Loader2, Share2, Award, BookOpen, AlertTriangle, Sparkles } from 'lucide-react';
+import {
+  Check,
+  Download,
+  Printer,
+  Loader2,
+  Share2,
+  Award,
+  BookOpen,
+  AlertTriangle,
+  RotateCcw,
+  Sparkles,
+  TrendingUp,
+  SlidersHorizontal,
+} from 'lucide-react';
 
 interface MarksTableProps {
   marksData: BputMarksData;
@@ -12,6 +25,22 @@ interface MarksTableProps {
   onPrint?: () => void;
   onShare?: () => void;
 }
+
+// BPUT CBCS standard grade point map
+const CBCS_GRADE_POINTS: Record<string, number> = {
+  O: 10,
+  E: 9,
+  A: 8,
+  B: 7,
+  C: 6,
+  D: 5,
+  P: 4,
+  F: 0,
+  'F(EX)': 0,
+  'F(INT)': 0,
+  M: 0,
+  S: 0,
+};
 
 export const MarksTable: React.FC<MarksTableProps> = ({
   marksData,
@@ -25,29 +54,62 @@ export const MarksTable: React.FC<MarksTableProps> = ({
   const [downloadStatus, setDownloadStatus] = useState<'idle' | 'generating' | 'downloaded'>('idle');
   const [lastFilename, setLastFilename] = useState<string>('');
 
+  // What-If SGPA Simulator State
+  const [isSimulatorActive, setIsSimulatorActive] = useState<boolean>(false);
+  const [simulatedGrades, setSimulatedGrades] = useState<Record<string, string>>({});
+
   if (!marksData || !marksData.grades || marksData.grades.length === 0) {
     return null;
   }
 
   const { grades, sgpadetails } = marksData;
-  const sgpaValue = parseFloat(String(sgpadetails?.sgpa || 0)) || 0;
+  const originalSgpa = parseFloat(String(sgpadetails?.sgpa || 0)) || 0;
   const totalCredits = parseFloat(String(sgpadetails?.cretits || sgpadetails?.credits || 0)) || 0;
 
-  let externalBacklogsCount = 0;
-  let internalBacklogsCount = 0;
-  let otherBacklogsCount = 0;
-
-  const backlogSubjectsList = grades.filter((g) => {
-    const classification = classifyBacklogGrade(g.grade, g.subjectTP);
-    if (classification.isBacklog) {
-      if (classification.isExternal) externalBacklogsCount++;
-      if (classification.isInternal) internalBacklogsCount++;
-      if (!classification.isExternal && !classification.isInternal) otherBacklogsCount++;
-      return true;
+  // Calculate simulated SGPA when in simulation mode
+  const { currentSgpa, currentBacklogsCount, sgpaDelta } = useMemo(() => {
+    if (!isSimulatorActive) {
+      let bCount = 0;
+      grades.forEach((g) => {
+        if (classifyBacklogGrade(g.grade, g.subjectTP).isBacklog) {
+          bCount++;
+        }
+      });
+      return {
+        currentSgpa: originalSgpa,
+        currentBacklogsCount: bCount,
+        sgpaDelta: 0,
+      };
     }
-    return false;
-  });
-  const backlogsCount = backlogSubjectsList.length;
+
+    let totalPoints = 0;
+    let countedCredits = 0;
+    let bCount = 0;
+
+    grades.forEach((g) => {
+      const paperCode = g.subjectCODE;
+      const effectiveGrade = (simulatedGrades[paperCode] || g.grade || '').toUpperCase().trim();
+      const credits = typeof g.subjectCredits === 'number' ? g.subjectCredits : parseFloat(String(g.subjectCredits || 0)) || 0;
+      const point = CBCS_GRADE_POINTS[effectiveGrade] ?? (CBCS_GRADE_POINTS[effectiveGrade.slice(0, 1)] ?? 0);
+
+      totalPoints += point * credits;
+      countedCredits += credits;
+
+      if (classifyBacklogGrade(effectiveGrade, g.subjectTP).isBacklog) {
+        bCount++;
+      }
+    });
+
+    const calculatedSgpa = countedCredits > 0 ? totalPoints / countedCredits : originalSgpa;
+    const roundedSgpa = Math.round(calculatedSgpa * 100) / 100;
+    const delta = Math.round((roundedSgpa - originalSgpa) * 100) / 100;
+
+    return {
+      currentSgpa: roundedSgpa,
+      currentBacklogsCount: bCount,
+      sgpaDelta: delta,
+    };
+  }, [isSimulatorActive, simulatedGrades, grades, originalSgpa]);
 
   const getDivision = (sgpa: number) => {
     if (sgpa >= 8.5) return 'First Class with Distinction';
@@ -57,10 +119,17 @@ export const MarksTable: React.FC<MarksTableProps> = ({
     return 'Under Evaluation';
   };
 
-  /**
-   * Generates and downloads the official PDF marksheet file,
-   * then triggers window.print() if supported.
-   */
+  const handleGradeChange = (paperCode: string, newGrade: string) => {
+    setSimulatedGrades((prev) => ({
+      ...prev,
+      [paperCode]: newGrade,
+    }));
+  };
+
+  const resetSimulation = () => {
+    setSimulatedGrades({});
+  };
+
   const handleGeneratePdfAndPrint = (triggerPrintDialog = true) => {
     try {
       setDownloadStatus('generating');
@@ -98,14 +167,12 @@ export const MarksTable: React.FC<MarksTableProps> = ({
     const classification = classifyBacklogGrade(gradeStr, subjectTP);
 
     if (classification.isBacklog) {
-      const isExt = classification.isExternal;
-      const isInt = classification.isInternal;
       const isBoth = classification.backlogType === 'BOTH';
+      const isInt = classification.isInternal;
 
       let badgeClasses = 'bg-rose-50 text-rose-700 border-rose-200';
       if (isBoth) badgeClasses = 'bg-purple-50 text-purple-700 border-purple-200';
       else if (isInt) badgeClasses = 'bg-amber-50 text-amber-800 border-amber-200';
-      else if (classification.displayGrade.includes('ABS')) badgeClasses = 'bg-slate-100 text-slate-700 border-slate-200';
 
       return (
         <span
@@ -114,7 +181,7 @@ export const MarksTable: React.FC<MarksTableProps> = ({
             isBoth
               ? 'External & Internal Fail'
               : isInt
-              ? 'Internal Assessment / Sessional Fail'
+              ? 'Internal Assessment Fail'
               : 'External University Examination Fail'
           }
         >
@@ -129,12 +196,8 @@ export const MarksTable: React.FC<MarksTableProps> = ({
     }
 
     const grade = (gradeStr || '').trim().toUpperCase();
-    const badgeClass = 'bg-emerald-50 text-emerald-800 border-emerald-200 font-bold font-mono shadow-xs';
-
     return (
-      <span
-        className={`inline-flex items-center justify-center min-w-[34px] px-2.5 h-7 rounded-lg text-sm border ${badgeClass}`}
-      >
+      <span className="inline-flex items-center justify-center min-w-[34px] px-2.5 h-7 rounded-lg text-sm border bg-emerald-50 text-emerald-800 border-emerald-200 font-bold font-mono shadow-xs">
         {grade || '-'}
         {isRecheck && (
           <span className="text-rose-600 font-bold text-sm ml-0.5 leading-none" title="Grade updated via official rechecking">
@@ -144,6 +207,9 @@ export const MarksTable: React.FC<MarksTableProps> = ({
       </span>
     );
   };
+
+  // Backlogs from official data
+  const officialBacklogList = grades.filter((g) => classifyBacklogGrade(g.grade, g.subjectTP).isBacklog);
 
   return (
     <div className="space-y-6">
@@ -162,26 +228,35 @@ export const MarksTable: React.FC<MarksTableProps> = ({
         </p>
       </div>
 
-      {/* Transcript Summary Metrics Cards (JugaadBro Style) */}
+      {/* Transcript Summary Metrics Cards */}
       <div
         className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 sm:gap-4"
         data-purpose="transcript-summary-metrics"
       >
         <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center justify-between mb-1">
             <span className="text-[11px] uppercase tracking-wider font-bold text-slate-500">
-              Semester SGPA
+              {isSimulatorActive ? 'Simulated SGPA' : 'Semester SGPA'}
             </span>
             <span className="w-5 h-5 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center text-[10px] font-bold">
               ✦
             </span>
           </div>
-          <p className="text-2xl sm:text-3xl font-extrabold text-emerald-600 font-mono mt-0.5">{sgpaValue.toFixed(2)}</p>
+          <div className="flex items-baseline gap-2">
+            <p className="text-2xl sm:text-3xl font-extrabold text-emerald-600 font-mono">
+              {currentSgpa.toFixed(2)}
+            </p>
+            {isSimulatorActive && sgpaDelta !== 0 && (
+              <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${sgpaDelta > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                {sgpaDelta > 0 ? `+${sgpaDelta.toFixed(2)}` : sgpaDelta.toFixed(2)}
+              </span>
+            )}
+          </div>
           <p className="text-[10px] text-slate-400 font-medium mt-1">Scale of 10.00</p>
         </div>
 
         <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center justify-between mb-1">
             <span className="text-[11px] uppercase tracking-wider font-bold text-slate-500">
               Total Credits
             </span>
@@ -189,29 +264,29 @@ export const MarksTable: React.FC<MarksTableProps> = ({
               ✦
             </span>
           </div>
-          <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-mono mt-0.5">{totalCredits}</p>
-          <p className="text-[10px] text-slate-400 font-medium mt-1">Earned: {totalCredits} Credits</p>
+          <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-mono">{totalCredits}</p>
+          <p className="text-[10px] text-slate-400 font-medium mt-1">Total Semester Weight</p>
         </div>
 
         <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center justify-between mb-1">
             <span className="text-[11px] uppercase tracking-wider font-bold text-slate-500">
               Result Status
             </span>
-            <span className="w-5 h-5 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center text-[10px] font-bold">
-              ✓
+            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${currentBacklogsCount === 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+              {currentBacklogsCount === 0 ? '✓' : '!'}
             </span>
           </div>
-          <p className={`text-2xl sm:text-3xl font-extrabold font-mono mt-0.5 ${backlogsCount === 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-            {backlogsCount === 0 ? 'PASS' : 'BACKLOG'}
+          <p className={`text-2xl sm:text-3xl font-extrabold font-mono ${currentBacklogsCount === 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+            {currentBacklogsCount === 0 ? 'PASS' : 'BACKLOG'}
           </p>
           <p className="text-[10px] text-slate-500 font-medium truncate mt-1">
-            {backlogsCount === 0 ? getDivision(sgpaValue) : `${backlogsCount} Backlog(s)`}
+            {currentBacklogsCount === 0 ? getDivision(currentSgpa) : `${currentBacklogsCount} Backlog(s)`}
           </p>
         </div>
 
         <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center justify-between mb-1">
             <span className="text-[11px] uppercase tracking-wider font-bold text-slate-500">
               Pending Backlogs
             </span>
@@ -219,21 +294,67 @@ export const MarksTable: React.FC<MarksTableProps> = ({
               #
             </span>
           </div>
-          <p className={`text-2xl sm:text-3xl font-extrabold font-mono mt-0.5 ${backlogsCount === 0 ? 'text-slate-800' : 'text-rose-600'}`}>
-            {backlogsCount}
+          <p className={`text-2xl sm:text-3xl font-extrabold font-mono ${currentBacklogsCount === 0 ? 'text-slate-800' : 'text-rose-600'}`}>
+            {currentBacklogsCount}
           </p>
           <p className="text-[10px] text-slate-400 font-medium mt-1">
-            {backlogsCount === 0 ? 'All subjects cleared' : 'Requires reappearance'}
+            {currentBacklogsCount === 0 ? 'All subjects cleared' : 'Requires reappearance'}
           </p>
         </div>
       </div>
 
-      {/* Detailed Subject Grades Table */}
+      {/* Interactive Academic Benchmark Spectrum Bar */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs no-print">
+        <div className="flex items-center justify-between gap-2 mb-2.5">
+          <div className="flex items-center gap-2">
+            <Award className="w-4 h-4 text-emerald-600" />
+            <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+              BPUT Performance Benchmark Scale
+            </h4>
+          </div>
+          <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200">
+            {currentSgpa.toFixed(2)} SGPA · {getDivision(currentSgpa)}
+          </span>
+        </div>
+
+        {/* Progress Bar Spectrum */}
+        <div className="relative pt-1 pb-2">
+          <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden flex">
+            <div className="h-full bg-rose-400/70" style={{ width: '50%' }} title="Below 5.0: Incomplete" />
+            <div className="h-full bg-amber-400/80" style={{ width: '10%' }} title="5.0 - 6.0: Pass Class" />
+            <div className="h-full bg-blue-400/80" style={{ width: '10%' }} title="6.0 - 7.0: Second Class" />
+            <div className="h-full bg-teal-500/80" style={{ width: '15%' }} title="7.0 - 8.5: First Class" />
+            <div className="h-full bg-emerald-600" style={{ width: '15%' }} title="8.5 - 10.0: Distinction" />
+          </div>
+
+          {/* Marker pin */}
+          <div
+            className="absolute top-0 -translate-x-1/2 flex flex-col items-center transition-all duration-300"
+            style={{ left: `${Math.min(100, Math.max(0, currentSgpa * 10))}%` }}
+          >
+            <div className="w-3.5 h-3.5 bg-slate-900 border-2 border-white rounded-full shadow-md" />
+            <span className="text-[10px] font-mono font-bold text-slate-900 mt-0.5">
+              ▲ {currentSgpa.toFixed(2)}
+            </span>
+          </div>
+        </div>
+
+        {/* Spectrum Tier Labels */}
+        <div className="grid grid-cols-5 text-[10px] text-slate-500 font-medium text-center pt-3 border-t border-slate-100">
+          <span>&lt; 5.0 (Fail)</span>
+          <span>5.0 (Pass)</span>
+          <span>6.0 (2nd Class)</span>
+          <span>7.0 (1st Class)</span>
+          <span className="font-bold text-emerald-700">8.5+ (Distinction)</span>
+        </div>
+      </div>
+
+      {/* Detailed Subject Grades Table with What-If Simulator Header */}
       <section
         className="bg-white rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all overflow-hidden"
         data-purpose="semester-grade-sheet"
       >
-        <div className="bg-slate-50/70 border-b border-slate-100 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-slate-50/70 border-b border-slate-100 px-5 sm:px-7 py-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200/60 flex items-center justify-center text-emerald-700 shadow-xs">
               <BookOpen className="w-4 h-4 stroke-[2.2]" />
@@ -243,14 +364,60 @@ export const MarksTable: React.FC<MarksTableProps> = ({
                 {examTitle || 'Semester Examination Result Summary'}
               </h3>
               <p className="text-[11px] font-medium text-slate-500 mt-0.5">
-                Official Paper Breakdown &amp; Grade Points
+                {grades.length} Examination Papers Listed · {totalCredits} Total Credits
               </p>
             </div>
           </div>
-          <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold px-3 py-1 rounded-full">
-            {grades.length} Papers Listed
-          </span>
+
+          {/* Interactive What-If Simulator Button */}
+          <div className="flex items-center gap-2 no-print">
+            <button
+              type="button"
+              onClick={() => {
+                setIsSimulatorActive(!isSimulatorActive);
+                if (isSimulatorActive) {
+                  resetSimulation();
+                }
+              }}
+              className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-xs ${
+                isSimulatorActive
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                  : 'bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border-slate-200'
+              }`}
+              title="Toggle What-If grade simulation to estimate revised SGPA"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>{isSimulatorActive ? 'Exit Simulator' : 'What-If SGPA Simulator'}</span>
+            </button>
+
+            {isSimulatorActive && Object.keys(simulatedGrades).length > 0 && (
+              <button
+                type="button"
+                onClick={resetSimulation}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-rose-600 text-xs font-semibold transition-all cursor-pointer shadow-xs"
+                title="Reset simulated grades to published values"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset</span>
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Simulator Active Notification Banner */}
+        {isSimulatorActive && (
+          <div className="bg-emerald-50/80 border-b border-emerald-100 px-5 sm:px-7 py-3 flex items-center justify-between gap-3 text-xs text-emerald-900 no-print animate-in fade-in duration-200">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>
+                <strong>What-If Mode Active:</strong> Change any paper&apos;s grade in the table below to simulate your rechecking or backlog clearance SGPA in real-time.
+              </span>
+            </div>
+            <span className="font-mono font-bold text-xs bg-white text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 shrink-0">
+              Live SGPA: {currentSgpa.toFixed(2)}
+            </span>
+          </div>
+        )}
 
         {/* Desktop Table View */}
         <div className="hidden sm:block overflow-x-auto">
@@ -272,8 +439,8 @@ export const MarksTable: React.FC<MarksTableProps> = ({
                 <th className="py-3.5 px-4 w-24 text-center border-r border-slate-100" scope="col">
                   Credits
                 </th>
-                <th className="py-3.5 px-4 w-32 text-center" scope="col">
-                  Final Grade
+                <th className="py-3.5 px-4 w-36 text-center" scope="col">
+                  {isSimulatorActive ? 'Simulated Grade' : 'Final Grade'}
                 </th>
               </tr>
             </thead>
@@ -284,6 +451,9 @@ export const MarksTable: React.FC<MarksTableProps> = ({
                   String(item.subjectTP || '').trim().toUpperCase() === 'PR';
                 const isSessional = String(item.subjectTP || '').trim().toUpperCase() === 'S';
                 const isRecheck = item.recheck === 1;
+                const activeGrade = isSimulatorActive && simulatedGrades[item.subjectCODE] !== undefined
+                  ? simulatedGrades[item.subjectCODE]
+                  : item.grade;
 
                 return (
                   <tr
@@ -292,13 +462,17 @@ export const MarksTable: React.FC<MarksTableProps> = ({
                       isPractical ? 'bg-purple-50/20' : ''
                     }`}
                   >
-                    <td className="py-3 px-4 text-center font-semibold text-slate-400 border-r border-slate-100">{idx + 1}</td>
+                    <td className="py-3 px-4 text-center font-semibold text-slate-400 border-r border-slate-100">
+                      {idx + 1}
+                    </td>
                     <td className="py-3 px-4 font-mono font-bold text-slate-800 border-r border-slate-100">
                       <span className="bg-slate-100 text-slate-800 px-2.5 py-0.5 rounded-lg border border-slate-200/80">
                         {item.subjectCODE}
                       </span>
                     </td>
-                    <td className="py-3 px-4 font-semibold text-slate-900 border-r border-slate-100">{item.subjectName}</td>
+                    <td className="py-3 px-4 font-semibold text-slate-900 border-r border-slate-100">
+                      {item.subjectName}
+                    </td>
                     <td className="py-3 px-4 text-center border-r border-slate-100">
                       {isPractical ? (
                         <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
@@ -314,15 +488,35 @@ export const MarksTable: React.FC<MarksTableProps> = ({
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-center font-mono font-semibold text-slate-800 border-r border-slate-100">{item.subjectCredits}</td>
+                    <td className="py-3 px-4 text-center font-mono font-semibold text-slate-800 border-r border-slate-100">
+                      {item.subjectCredits}
+                    </td>
                     <td className="py-3 px-4 text-center">
-                      {renderGradeBadge(item.grade, isRecheck, item.subjectTP)}
+                      {isSimulatorActive ? (
+                        <select
+                          value={activeGrade}
+                          onChange={(e) => handleGradeChange(item.subjectCODE, e.target.value)}
+                          className="h-8 px-2 bg-emerald-50 border border-emerald-300 font-mono font-bold text-xs rounded-lg text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-xs"
+                        >
+                          <option value="O">O (10)</option>
+                          <option value="E">E (9)</option>
+                          <option value="A">A (8)</option>
+                          <option value="B">B (7)</option>
+                          <option value="C">C (6)</option>
+                          <option value="D">D (5)</option>
+                          <option value="P">P (4)</option>
+                          <option value="F">F (0)</option>
+                          <option value="F(EX)">F(EX) (0)</option>
+                          <option value="F(INT)">F(INT) (0)</option>
+                        </select>
+                      ) : (
+                        renderGradeBadge(item.grade, isRecheck, item.subjectTP)
+                      )}
                     </td>
                   </tr>
                 );
               })}
             </tbody>
-            {/* Transcript Summary Footer */}
             <tfoot>
               <tr className="bg-slate-50/80 border-t border-slate-200/80 text-sm font-bold">
                 <td
@@ -330,8 +524,10 @@ export const MarksTable: React.FC<MarksTableProps> = ({
                   colSpan={4}
                 >
                   <div className="flex items-center justify-end gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    <span className="text-slate-800">Cumulative Semester Performance Total:</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="text-slate-800">
+                      {isSimulatorActive ? 'Simulated Semester Performance Total:' : 'Official Cumulative Performance Total:'}
+                    </span>
                   </div>
                 </td>
                 <td className="py-4 px-4 text-center">
@@ -350,7 +546,7 @@ export const MarksTable: React.FC<MarksTableProps> = ({
                       SGPA:
                     </span>
                     <span className="text-emerald-700 font-extrabold text-base font-mono">
-                      {sgpadetails?.sgpa || '0.00'}
+                      {currentSgpa.toFixed(2)}
                     </span>
                   </div>
                 </td>
@@ -367,6 +563,9 @@ export const MarksTable: React.FC<MarksTableProps> = ({
               String(item.subjectTP || '').trim().toUpperCase() === 'PR';
             const isSessional = String(item.subjectTP || '').trim().toUpperCase() === 'S';
             const isRecheck = item.recheck === 1;
+            const activeGrade = isSimulatorActive && simulatedGrades[item.subjectCODE] !== undefined
+              ? simulatedGrades[item.subjectCODE]
+              : item.grade;
 
             return (
               <div
@@ -394,7 +593,24 @@ export const MarksTable: React.FC<MarksTableProps> = ({
                     )}
                   </div>
                   <div className="shrink-0">
-                    {renderGradeBadge(item.grade, isRecheck, item.subjectTP)}
+                    {isSimulatorActive ? (
+                      <select
+                        value={activeGrade}
+                        onChange={(e) => handleGradeChange(item.subjectCODE, e.target.value)}
+                        className="h-7 px-1.5 bg-emerald-50 border border-emerald-300 font-mono font-bold text-xs rounded-lg text-emerald-900"
+                      >
+                        <option value="O">O</option>
+                        <option value="E">E</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                        <option value="P">P</option>
+                        <option value="F">F</option>
+                      </select>
+                    ) : (
+                      renderGradeBadge(item.grade, isRecheck, item.subjectTP)
+                    )}
                   </div>
                 </div>
 
@@ -426,18 +642,18 @@ export const MarksTable: React.FC<MarksTableProps> = ({
             </div>
             <div className="text-right">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-                Semester SGPA
+                {isSimulatorActive ? 'Simulated SGPA' : 'Semester SGPA'}
               </span>
               <span className="font-mono font-extrabold text-emerald-600 text-2xl">
-                {sgpadetails?.sgpa || '0.00'}
+                {currentSgpa.toFixed(2)}
               </span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Backlog Subjects Details */}
-      {backlogsCount > 0 && (
+      {/* Backlog Subjects Details (if any exist) */}
+      {officialBacklogList.length > 0 && (
         <div
           className="bg-rose-50/60 border border-rose-200 rounded-3xl p-5 sm:p-6 shadow-xs space-y-3.5 no-print"
           data-purpose="backlog-subject-status"
@@ -448,16 +664,16 @@ export const MarksTable: React.FC<MarksTableProps> = ({
                 <AlertTriangle className="w-4 h-4 stroke-[2]" />
               </div>
               <h4 className="text-sm sm:text-base font-bold text-slate-900 uppercase tracking-wide">
-                Pending Backlog Subjects ({backlogsCount})
+                Pending Backlog Subjects ({officialBacklogList.length})
               </h4>
             </div>
             <span className="text-xs font-semibold px-3 py-1 bg-white text-rose-700 rounded-full border border-rose-200 shadow-xs">
-              Action Required
+              Reappearance Required
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {backlogSubjectsList.map((b, idx) => {
+            {officialBacklogList.map((b, idx) => {
               const gr = String(b.grade || '').toUpperCase().trim();
               const statusLabel =
                 gr === 'M' ? 'MP (Malpractice)' : gr === 'S' ? 'Absent' : gr === 'P' ? 'Pending' : gr;
@@ -476,12 +692,12 @@ export const MarksTable: React.FC<MarksTableProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] font-medium text-slate-500 mt-1">
-                      Type: {String(b.subjectTP || '').toUpperCase() === 'P' ? 'Practical' : 'Theory'} • Credits: {b.subjectCredits}
+                      Type: {String(b.subjectTP || '').toUpperCase() === 'P' ? 'Practical' : 'Theory'} · Credits: {b.subjectCredits}
                     </p>
                   </div>
                   <div className="shrink-0">
                     <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-rose-600 text-white shadow-xs">
-                      Status: {statusLabel}
+                      {statusLabel}
                     </span>
                   </div>
                 </div>
@@ -491,7 +707,7 @@ export const MarksTable: React.FC<MarksTableProps> = ({
         </div>
       )}
 
-      {/* Print Action Bar */}
+      {/* Action Bar (Print, PDF, Share) */}
       <div
         className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4 no-print"
         data-purpose="result-print-actions"
@@ -500,13 +716,12 @@ export const MarksTable: React.FC<MarksTableProps> = ({
           {downloadStatus === 'downloaded' && (
             <div className="flex items-center gap-2 text-xs text-emerald-800 font-semibold bg-emerald-50 px-3.5 py-1.5 rounded-full border border-emerald-200">
               <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>PDF Marksheet downloaded: {lastFilename}</span>
+              <span>PDF Marksheet saved: {lastFilename}</span>
             </div>
           )}
         </div>
 
         <div className="flex flex-wrap items-center justify-center sm:justify-end gap-3 w-full sm:w-auto">
-          {/* Share Result URL Button */}
           {onShare && (
             <button
               type="button"
@@ -519,7 +734,6 @@ export const MarksTable: React.FC<MarksTableProps> = ({
             </button>
           )}
 
-          {/* Main Print Result Button */}
           <button
             type="button"
             disabled={downloadStatus === 'generating'}
@@ -540,19 +754,18 @@ export const MarksTable: React.FC<MarksTableProps> = ({
             </span>
           </button>
 
-          {/* Download Grade Card Button (JugaadBro Gradient Primary) */}
           <button
             type="button"
             disabled={downloadStatus === 'generating'}
             onClick={() => handleGeneratePdfAndPrint(false)}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-sm hover:shadow-md active:translate-y-px transition-all cursor-pointer disabled:opacity-75"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs hover:shadow-md active:translate-y-px transition-all cursor-pointer disabled:opacity-75"
           >
             {downloadStatus === 'generating' ? (
               <Loader2 className="w-4 h-4 text-white animate-spin" />
             ) : (
               <Download className="w-4 h-4 text-white" />
             )}
-            <span>Download Grade Card</span>
+            <span>Download Vector PDF</span>
           </button>
         </div>
       </div>

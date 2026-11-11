@@ -12,7 +12,7 @@ export const ResultModeTabs: React.FC<ResultModeTabsProps> = ({
 }) => {
   return (
     <div
-      className="w-full max-w-xl mx-auto pb-2 no-print"
+      className="w-full pb-2 no-print"
       data-purpose="result-mode-tabs"
       role="tablist"
       aria-label="Result Evaluation Mode"

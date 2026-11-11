@@ -81,11 +81,8 @@ export const SearchForm: React.FC<SearchFormProps> = ({
             <Search className="w-4 h-4 stroke-[2.2]" />
           </span>
           <div>
-            <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight flex items-center gap-2">
-              <span>Student Examination Search</span>
-              <span className="hidden sm:inline-flex bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full border border-emerald-200/70">
-                Multi-Session Auto-Scan
-              </span>
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+              Student Examination Search
             </h2>
           </div>
         </div>

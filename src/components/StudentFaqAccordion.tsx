@@ -39,7 +39,7 @@ export const StudentFaqAccordion: React.FC = () => {
   ];
 
   return (
-    <section className="space-y-6 no-print my-10 max-w-4xl mx-auto" aria-label="Frequently Asked Questions">
+    <section className="w-full space-y-6 no-print my-8" aria-label="Frequently Asked Questions">
       {/* FAQ Header */}
       <div className="text-center max-w-2xl mx-auto flex flex-col items-center">
         <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 text-xs font-bold px-3.5 py-1.5 rounded-full border border-emerald-200/70 mb-3 shadow-xs select-none">

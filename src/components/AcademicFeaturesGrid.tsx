@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   CheckCircle2
 } from 'lucide-react';
+import { SgpaSimulatorSection } from './SgpaSimulatorSection';
 
 interface AcademicFeaturesGridProps {
   onOpenGradingModal?: () => void;
@@ -125,46 +126,11 @@ export const AcademicFeaturesGrid: React.FC<AcademicFeaturesGridProps> = ({
         })}
       </div>
 
-      {/* JugaadBro Signature Hero Call-to-Action Banner */}
-      <div className="rounded-3xl bg-gradient-to-r from-emerald-600 to-teal-700 p-7 sm:p-10 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
-        {/* Glow Spheres */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute -bottom-10 -left-10 w-60 h-60 bg-emerald-400/20 rounded-full blur-2xl pointer-events-none"></div>
-
-        <div className="space-y-1.5 text-center md:text-left relative z-10">
-          <span className="text-xs font-bold uppercase tracking-wider text-emerald-100 bg-white/15 px-3 py-1 rounded-full inline-block mb-1">
-            Zero Server Stress • Instant Marksheet
-          </span>
-          <h3 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            Ready to check your grades?
-          </h3>
-          <p className="text-emerald-100 text-xs sm:text-sm max-w-xl font-medium">
-            Join thousands of BPUT students who rely on this portal for instantaneous grade access and vector PDF marksheets.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-center gap-3 relative z-10 shrink-0">
-          {onFocusSearch && (
-            <button
-              type="button"
-              onClick={onFocusSearch}
-              className="px-6 py-3.5 bg-white hover:bg-slate-50 text-slate-900 font-bold text-sm rounded-full shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <span>Check Your Result</span>
-              <ArrowRight className="w-4 h-4 text-emerald-600" />
-            </button>
-          )}
-          {onOpenGradingModal && (
-            <button
-              type="button"
-              onClick={onOpenGradingModal}
-              className="px-5 py-3.5 bg-white/15 hover:bg-white/25 text-white font-semibold text-sm rounded-full border border-white/25 transition-all cursor-pointer"
-            >
-              <span>Explore CBCS Scale</span>
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Interactive SGPA Simulator: Ready to check your grades? */}
+      <SgpaSimulatorSection
+        onOpenGradingModal={onOpenGradingModal}
+        onFocusSearch={onFocusSearch}
+      />
     </section>
   );
 };
