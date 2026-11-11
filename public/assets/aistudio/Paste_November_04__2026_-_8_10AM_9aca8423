@@ -1,0 +1,945 @@
+import React, { useRef, useState, useEffect, useMemo } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
+import {
+  UploadCloud,
+  FileText,
+  X,
+  CheckCircle2,
+  FileQuestion,
+  Eye,
+  ShieldCheck,
+  ExternalLink,
+  Loader2,
+  Globe,
+  Layers,
+  Home
+} from "lucide-react";
+import { uploadPYQ, fulfillPaperRequest } from "../lib/api";
+import {
+  BRANCHES,
+  SEMESTERS,
+  YEARS,
+  EXAM_TYPES,
+  COMMON_PAPERS,
+  getBranchSemesterSubjects,
+  isCommonToAllBranches,
+  parseBranches,
+  formatBranchDisplay
+} from "../lib/constants";
+import { motion, AnimatePresence } from "motion/react";
+import SEOHead from "../components/SEOHead";
+
+const UPLOAD_IMG = "https://static.prod-images.emergentagent.com/jobs/d9247485-9eba-4be5-85c5-f51a4558b9d1/images/4968edd818717381bac4c50a47e0828034ae78c6ef52868f85e822cf8014a4e3.png";
+
+const DEFAULT_SELECTED_BRANCHES = [
+  "CSE",
+  "IT",
+  "CSE (AI & ML)",
+  "ECE / ETC",
+  "Material & Metallurgy"
+];
+
+export default function Upload() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestId = searchParams.get("request_id") || "";
+  const requestPaperName = searchParams.get("paper") || "Requested Paper";
+
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [drag, setDrag] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Branch applicability mode: "single" | "all" | "specific"
+  const [branchMode, setBranchMode] = useState<"single" | "all" | "specific">("single");
+  const [selectedSpecificBranches, setSelectedSpecificBranches] = useState<string[]>(DEFAULT_SELECTED_BRANCHES);
+
+  const [form, setForm] = useState({
+    paper: searchParams.get("paper") || "",
+    branch: searchParams.get("branch") || "CSE",
+    semester: searchParams.get("semester") || "1",
+    year: searchParams.get("year") || "2024-25",
+    exam_type: searchParams.get("exam_type") || "Regular/Back",
+    uploader_name: "",
+  });
+
+  const [isCustomPaper, setIsCustomPaper] = useState(Boolean(searchParams.get("paper")));
+  const [selectedPaperOption, setSelectedPaperOption] = useState(
+    searchParams.get("paper") ? "custom" : ""
+  );
+
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(true);
+  const [newPaperId, setNewPaperId] = useState("");
+  const [confetti, setConfetti] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (searchParams.get("paper")) {
+      setIsCustomPaper(true);
+      setSelectedPaperOption("custom");
+    }
+    const paramBranch = searchParams.get("branch");
+    if (paramBranch) {
+      if (isCommonToAllBranches(paramBranch)) {
+        setBranchMode("all");
+        update("branch", "All Branches");
+      } else if (paramBranch.includes(",")) {
+        setBranchMode("specific");
+        const list = parseBranches(paramBranch);
+        setSelectedSpecificBranches(list);
+        update("branch", list.join(", "));
+      } else {
+        setBranchMode("single");
+        update("branch", paramBranch);
+      }
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && showConfirmModal && !submitting) {
+        setShowConfirmModal(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showConfirmModal, submitting]);
+
+  const resetForm = () => {
+    setFile(null);
+    setForm({
+      paper: "",
+      branch: "CSE",
+      semester: "1",
+      year: "2024-25",
+      exam_type: "Regular/Back",
+      uploader_name: "",
+    });
+    setBranchMode("single");
+    setSelectedSpecificBranches(DEFAULT_SELECTED_BRANCHES);
+    setIsCustomPaper(false);
+    setSelectedPaperOption("");
+    setShowSuccess(false);
+    setShowConfirmModal(false);
+    setTermsAccepted(true);
+    setNewPaperId("");
+  };
+
+  const update = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleBranchModeChange = (mode: "single" | "all" | "specific") => {
+    setBranchMode(mode);
+    setSelectedPaperOption("");
+    setIsCustomPaper(false);
+    update("paper", "");
+
+    if (mode === "single") {
+      update("branch", BRANCHES[0]);
+    } else if (mode === "all") {
+      update("branch", "All Branches");
+    } else if (mode === "specific") {
+      const initial = selectedSpecificBranches.length > 0 ? selectedSpecificBranches : DEFAULT_SELECTED_BRANCHES;
+      setSelectedSpecificBranches(initial);
+      update("branch", initial.join(", "));
+    }
+  };
+
+  const toggleSpecificBranch = (b: string) => {
+    let next: string[];
+    if (selectedSpecificBranches.includes(b)) {
+      if (selectedSpecificBranches.length <= 1) {
+        toast.error("Please keep at least one branch selected, or switch to Single Branch mode.");
+        return;
+      }
+      next = selectedSpecificBranches.filter((item) => item !== b);
+    } else {
+      next = [...selectedSpecificBranches, b];
+    }
+    setSelectedSpecificBranches(next);
+    update("branch", next.join(", "));
+    setSelectedPaperOption("");
+    setIsCustomPaper(false);
+    update("paper", "");
+  };
+
+  const handleBranchChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    update("branch", val);
+    setSelectedPaperOption("");
+    setIsCustomPaper(false);
+    update("paper", "");
+  };
+
+  const handleSemesterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    update("semester", val);
+    setSelectedPaperOption("");
+    setIsCustomPaper(false);
+    update("paper", "");
+  };
+
+  const handlePaperOptionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setSelectedPaperOption(val);
+    if (val === "custom") {
+      setIsCustomPaper(true);
+      update("paper", "");
+    } else {
+      setIsCustomPaper(false);
+      update("paper", val);
+    }
+  };
+
+  const onFile = (f: File | undefined) => {
+    if (!f) return;
+    const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/jpg"];
+    if (!allowed.includes(f.type) && !/\.(pdf|jpg|jpeg|png|webp)$/i.test(f.name)) {
+      toast.error("Only PDF or image files (PDF/JPG/PNG/WEBP) are allowed");
+      return;
+    }
+    if (f.size > 25 * 1024 * 1024) {
+      toast.error("File is too large (max 25MB limit)");
+      return;
+    }
+    setFile(f);
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDrag(false);
+    onFile(e.dataTransfer.files?.[0]);
+  };
+
+  const handleInitialSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!file) {
+      toast.error("Please choose or drop a question paper file (PDF or image).");
+      return;
+    }
+    if (branchMode === "specific" && selectedSpecificBranches.length === 0) {
+      toast.error("Please select at least one branch for this multi-branch paper.");
+      return;
+    }
+    if (!form.paper.trim()) {
+      toast.error("Paper Name field is required");
+      return;
+    }
+    setTermsAccepted(true);
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmPublish = async () => {
+    if (!termsAccepted) {
+      toast.error("Please accept the Terms & Conditions to publish.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const fd = new FormData();
+      if (file) {
+        fd.append("file", file);
+      }
+      Object.entries(form).forEach(([k, v]) => {
+        fd.append(k, v as string);
+      });
+      const res = await uploadPYQ(fd);
+      setShowConfirmModal(false);
+      if (requestId && res?.id) {
+        await fulfillPaperRequest(requestId, res.id);
+        toast.success(`Fulfilled student request for ${requestPaperName}!`);
+      } else {
+        toast.success("PYQ uploaded successfully — thanks for contributing!");
+      }
+      
+      const colors = ["#F97316", "#2563EB", "#25D366", "#EAB308", "#EC4899", "#A855F7"];
+      const shapes = ["square", "circle", "triangle"];
+      const pCount = 70;
+      const generated = Array.from({ length: pCount }).map((_, i) => {
+        return {
+          id: i,
+          tx: (Math.random() - 0.5) * 850,
+          ty: -180 - Math.random() * 450,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          size: Math.floor(Math.random() * 12) + 12,
+          shape: shapes[Math.floor(Math.random() * shapes.length)],
+          delay: Math.random() * 0.4,
+          rotation: Math.random() * 360,
+        };
+      });
+      setConfetti(generated);
+      setNewPaperId(res.id);
+      setShowSuccess(true);
+    } catch (err: any) {
+      toast.error(err?.message || "Upload failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const candidates = useMemo(() => {
+    if (branchMode === "all") {
+      return getBranchSemesterSubjects("All Branches", form.semester);
+    }
+    if (branchMode === "specific") {
+      const branchesStr = selectedSpecificBranches.join(", ");
+      return getBranchSemesterSubjects(branchesStr, form.semester);
+    }
+    return getBranchSemesterSubjects(form.branch, form.semester);
+  }, [branchMode, form.branch, form.semester, selectedSpecificBranches]);
+
+  return (
+    <div className="w-full max-w-full mx-auto px-6 sm:px-10 md:px-12 lg:px-[10%] pt-6 sm:pt-8 pb-8 bg-[#FAF9F6] text-black flex-grow font-share" data-testid="upload-page">
+      <SEOHead
+        title="Upload BPUT Question Papers & Solutions PDF | GetPYQ"
+        description="Upload and contribute BPUT previous year question papers, mid-sem exams, and master solutions. Share resources with BPUT B.Tech students across all engineering branches."
+        keywords="upload bput question paper, contribute bput pyq, bput question paper submission, share bput papers, bput btech paper upload, getpyq upload"
+        canonicalUrl="https://getpyq.vercel.app/upload"
+        breadcrumbs={[
+          { name: "Home", item: "/" },
+          { name: "Upload PYQ", item: "/upload" }
+        ]}
+      />
+      {/* Fulfilling Request Banner */}
+      {requestId && (
+        <div className="max-w-5xl mx-auto mb-6 bg-amber-100 border-2 border-black p-4 rounded-xl shadow-[3px_3px_0px_#000] flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[#2563EB] text-white border-2 border-black rounded-lg flex items-center justify-center shadow-[1.5px_1.5px_0px_#000] shrink-0">
+              <FileQuestion className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-black uppercase text-[#2563EB]">
+                Fulfilling Student Paper Request
+              </div>
+              <div className="text-sm font-black text-black">
+                Paper: {requestPaperName}
+              </div>
+            </div>
+          </div>
+          <span className="bg-white text-black border border-black text-[10px] font-bold px-2.5 py-1 rounded-md shadow-[1px_1px_0px_#000] shrink-0">
+            Auto-Prefilled
+          </span>
+        </div>
+      )}
+
+      {/* Centered header block matching other pages */}
+      <div className="mb-8 text-center max-w-2xl mx-auto flex flex-col items-center">
+        <span className="inline-flex items-center gap-1.5 bg-amber-200 text-black font-share text-xs font-bold px-4 py-1.5 rounded-full border-2 border-black mb-4 shadow-[2px_2px_0px_#000] select-none">
+          ✦ BPUT Paper Archive ✦
+        </span>
+        <h1 className="font-momo font-bold text-3xl sm:text-4xl md:text-5xl text-black select-none leading-none mb-1">
+          Upload a BPUT PYQ
+        </h1>
+        <p className="text-gray-600 mt-2 text-xs sm:text-sm font-share font-medium leading-relaxed">
+          Help fellow students by uploading past BPUT (Biju Patnaik University of Technology) examination papers
+        </p>
+      </div>
+
+      <form onSubmit={handleInitialSubmit} className="grid md:grid-cols-2 gap-6 lg:gap-8 max-w-5xl mx-auto items-start" data-testid="upload-form">
+        {/* Dragzone - 50% on medium & laptop screens */}
+        <div className="brutal-card p-4 sm:p-6 bg-white border-2 border-black shadow-[4px_4px_0px_#000] rounded-xl flex flex-col justify-between md:h-full">
+          <div className="h-full flex flex-col justify-center">
+            <div
+              onClick={() => fileRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={onDrop}
+              data-testid="dropzone"
+              className={`cursor-pointer aspect-square md:aspect-auto md:min-h-[380px] lg:min-h-[440px] w-full rounded-xl border-2 border-dashed border-black bg-neutral-50 hover:bg-amber-50/10 transition-all flex flex-col items-center justify-center text-center p-6 ${
+                drag ? "bg-amber-100 border-solid" : ""
+              }`}
+            >
+              {file ? (
+                <div className="space-y-4 w-full max-w-sm flex flex-col items-center justify-center animate-fade-in" data-testid="file-preview">
+                  <div className="w-16 h-16 rounded-xl border-2 border-black bg-amber-100 flex items-center justify-center shadow-[2px_2px_0px_#000]">
+                    <FileText className="w-8 h-8 text-black" />
+                  </div>
+                  <div>
+                    <p className="font-bold break-all text-xs">{file.name}</p>
+                    <p className="text-[10px] font-bold text-[#F97316] mt-1">{(file.size / (1024 * 1024)).toFixed(2)} MB</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFile(null);
+                    }}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-red-600 hover:underline cursor-pointer border-2 border-red-600 rounded-lg px-3 py-1 bg-red-50 hover:bg-red-100 transition-colors"
+                    data-testid="remove-file"
+                  >
+                    <X className="w-3.5 h-3.5 stroke-[2.5]" /> Remove file
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center">
+                  <div className="w-16 h-16 rounded-xl border-2 border-black bg-[#FFE4E6] flex items-center justify-center mb-4 shadow-[2.5px_2.5px_0px_#000]">
+                    <UploadCloud className="w-8 h-8 text-black" />
+                  </div>
+                  <p className="font-share font-black text-base select-none">Drop your file here</p>
+                  <p className="text-[10px] text-gray-500 font-bold mt-1 select-none max-w-xs">or click to browse — PDF or Image (max 25MB)</p>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 mt-5 bg-[#2563EB] text-white border-2 border-black rounded-lg px-4 py-2 text-xs font-share font-bold shadow-[3px_3px_0px_#000] hover:bg-[#F97316] hover:scale-102 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer"
+                  >
+                    Choose File
+                  </button>
+                </div>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".pdf,image/*"
+                className="hidden"
+                data-testid="file-input"
+                onChange={(e) => onFile(e.target.files?.[0])}
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-gray-600 mt-6 flex items-start gap-2 select-none font-bold leading-relaxed">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 stroke-[2.5]" />
+            <span>Files are stored securely. Please ensure all uploaded papers pertain to BPUT University syllabus.</span>
+          </p>
+        </div>
+
+        {/* Metadata Inputs */}
+        <div className="space-y-4">
+          {/* Branch Applicability Mode */}
+          <div className="bg-white border-2 border-black rounded-xl p-3.5 shadow-[2.5px_2.5px_0px_#000] space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-share font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-[#2563EB]" />
+                Branch Applicability
+              </label>
+              <span className="text-[10px] font-share font-bold text-[#F97316]">
+                {branchMode === "all" ? "🌐 100% Branches" : branchMode === "specific" ? `🔀 ${selectedSpecificBranches.length} Branches Selected` : "🎓 Single Branch"}
+              </span>
+            </div>
+
+            {/* Segmented Mode Selector */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-stone-100 border-2 border-black rounded-xl text-center">
+              <button
+                type="button"
+                onClick={() => handleBranchModeChange("single")}
+                className={`py-2 px-1 text-[11px] font-share font-bold rounded-lg cursor-pointer transition-all ${
+                  branchMode === "single"
+                    ? "bg-black text-white shadow-[1.5px_1.5px_0px_#000]"
+                    : "text-gray-700 hover:text-black hover:bg-stone-200/50"
+                }`}
+              >
+                Single Branch
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBranchModeChange("all")}
+                className={`py-2 px-1 text-[11px] font-share font-bold rounded-lg cursor-pointer transition-all ${
+                  branchMode === "all"
+                    ? "bg-[#2563EB] text-white shadow-[1.5px_1.5px_0px_#000]"
+                    : "text-gray-700 hover:text-black hover:bg-blue-50"
+                }`}
+              >
+                All Branches (Common)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBranchModeChange("specific")}
+                className={`py-2 px-1 text-[11px] font-share font-bold rounded-lg cursor-pointer transition-all ${
+                  branchMode === "specific"
+                    ? "bg-[#F97316] text-white shadow-[1.5px_1.5px_0px_#000]"
+                    : "text-gray-700 hover:text-black hover:bg-amber-50"
+                }`}
+              >
+                Specific Branches
+              </button>
+            </div>
+
+            {/* Mode-Specific Branch Pickers */}
+            {branchMode === "single" && (
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="text-[10px] font-share font-bold text-gray-700 block mb-1">Select Department</label>
+                  <select
+                    data-testid="branch-select"
+                    value={form.branch}
+                    onChange={handleBranchChange}
+                    className="w-full h-11 border-2 border-black bg-white text-black text-xs font-share font-semibold px-2.5 rounded-lg outline-none cursor-pointer focus:bg-amber-50 focus:shadow-[2px_2px_0px_#000] focus:-translate-y-0.5 transition-all"
+                  >
+                    {BRANCHES.map((b) => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-share font-bold text-gray-700 block mb-1">Semester</label>
+                  <select
+                    data-testid="semester-select"
+                    value={form.semester}
+                    onChange={handleSemesterChange}
+                    className="w-full h-11 border-2 border-black bg-white text-black text-xs font-share font-semibold px-2.5 rounded-lg outline-none cursor-pointer focus:bg-amber-50 focus:shadow-[2px_2px_0px_#000] focus:-translate-y-0.5 transition-all"
+                  >
+                    {SEMESTERS.map((s) => <option key={s} value={s}>Sem {s}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {branchMode === "all" && (
+              <div className="space-y-3 pt-1">
+                <div className="p-3 bg-blue-50 border-2 border-[#2563EB] rounded-xl text-xs font-share text-[#1E40AF]">
+                  <div className="flex items-center gap-1.5 font-bold mb-1">
+                    <Globe className="w-4 h-4 text-[#2563EB] shrink-0 stroke-[2.5]" />
+                    <span>Common Subject for All Branches (Sem {form.semester})</span>
+                  </div>
+                
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-share font-bold text-gray-700 block mb-1">Semester</label>
+                  <select
+                    data-testid="semester-select"
+                    value={form.semester}
+                    onChange={handleSemesterChange}
+                    className="w-full h-11 border-2 border-black bg-white text-black text-xs font-share font-semibold px-2.5 rounded-lg outline-none cursor-pointer focus:bg-amber-50 focus:shadow-[2px_2px_0px_#000] focus:-translate-y-0.5 transition-all"
+                  >
+                    {SEMESTERS.map((s) => <option key={s} value={s}>Sem {s}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {branchMode === "specific" && (
+              <div className="space-y-3 pt-1">
+                <div>
+                  <label className="text-[10px] font-share font-bold text-gray-700 block mb-1.5">
+                    Click to select branches that share this subject:
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {BRANCHES.map((b) => {
+                      const isSelected = selectedSpecificBranches.includes(b);
+                      return (
+                        <button
+                          key={b}
+                          type="button"
+                          onClick={() => toggleSpecificBranch(b)}
+                          className={`px-3 py-1.5 text-xs font-share font-bold rounded-lg border-2 transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-[#F97316] text-white border-black shadow-[2px_2px_0px_#000] -translate-y-0.5"
+                              : "bg-white text-black border-black hover:bg-amber-50 shadow-[1px_1px_0px_#000]"
+                          }`}
+                        >
+                          {isSelected ? `✓ ${b}` : `+ ${b}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] font-share font-bold text-gray-600 mt-2">
+                    Active branches: <span className="text-[#F97316]">{selectedSpecificBranches.length ? selectedSpecificBranches.join(", ") : "None (Select at least 1)"}</span>
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-share font-bold text-gray-700 block mb-1">Semester</label>
+                  <select
+                    data-testid="semester-select"
+                    value={form.semester}
+                    onChange={handleSemesterChange}
+                    className="w-full h-11 border-2 border-black bg-white text-black text-xs font-share font-semibold px-2.5 rounded-lg outline-none cursor-pointer focus:bg-amber-50 focus:shadow-[2px_2px_0px_#000] focus:-translate-y-0.5 transition-all"
+                  >
+                    {SEMESTERS.map((s) => <option key={s} value={s}>Sem {s}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3.5">
+            <Field label="Examination Year">
+              <select
+                data-testid="year-select"
+                value={form.year}
+                onChange={(e) => update("year", e.target.value)}
+                className="w-full h-11 border-2 border-black bg-white text-black text-xs font-share font-semibold px-2.5 rounded-lg outline-none cursor-pointer focus:bg-amber-50 focus:shadow-[2px_2px_0px_#000] focus:-translate-y-0.5 transition-all"
+              >
+                {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </Field>
+
+            <Field label="Paper Type">
+              <select
+                data-testid="exam-select"
+                value={form.exam_type}
+                onChange={(e) => update("exam_type", e.target.value)}
+                className="w-full h-11 border-2 border-black bg-white text-black text-xs font-share font-semibold px-2.5 rounded-lg outline-none cursor-pointer focus:bg-amber-50 focus:shadow-[2px_2px_0px_#000] focus:-translate-y-0.5 transition-all"
+              >
+                {EXAM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </Field>
+          </div>
+
+          <Field label="Subject *">
+            <select
+              value={selectedPaperOption}
+              onChange={handlePaperOptionChange}
+              data-testid="paper-select"
+              className="w-full h-11 border-2 border-black bg-white text-black text-xs font-share font-semibold px-3 rounded-lg outline-none cursor-pointer focus:bg-amber-50 focus:shadow-[2px_2px_0px_#000] focus:-translate-y-0.5 transition-all"
+              required
+            >
+              <option value="">
+                -- Choose Subject ({formatBranchDisplay(form.branch)} Sem {form.semester}) --
+              </option>
+              {candidates.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+              <option value="custom">✍️ Other (Type Custom Subject Name)</option>
+            </select>
+          </Field>
+
+          {(isCustomPaper || !candidates.length) && (
+            <Field label="Custom Subject Name *">
+              <input
+                data-testid="paper-input"
+                value={form.paper}
+                onChange={(e) => update("paper", e.target.value)}
+                placeholder="e.g. Design & Analysis of Algorithms"
+                className="w-full h-11 border-2 border-black bg-white text-black text-xs font-share font-semibold px-3 rounded-lg outline-none focus:bg-amber-50 focus:shadow-[2px_2px_0px_#000] focus:-translate-y-0.5 transition-all animate-fade-in"
+                required
+              />
+            </Field>
+          )}
+
+          <Field label="Your Name (Optional)">
+            <input
+              data-testid="uploader-input"
+              value={form.uploader_name}
+              onChange={(e) => update("uploader_name", e.target.value)}
+              placeholder="Anonymous"
+              className="w-full h-11 border-2 border-black bg-white text-black text-xs font-share font-semibold px-3 rounded-lg outline-none focus:bg-amber-50 focus:shadow-[2px_2px_0px_#000] focus:-translate-y-0.5 transition-all"
+            />
+          </Field>
+
+          {/* User Request: Declaration before publish button */}
+          <div className="bg-amber-50 border-2 border-black p-3.5 rounded-lg text-[10px] font-share leading-relaxed text-slate-800 flex items-start gap-2.5 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+            <input
+              type="checkbox"
+              id="upload-declaration-checkbox"
+              required
+              defaultChecked
+              className="mt-0.5 shrink-0 scale-105 accent-amber-500 cursor-pointer"
+            />
+            <label htmlFor="upload-declaration-checkbox" className="cursor-pointer font-bold select-none">
+              Declaration: I confirm that the uploaded file is a genuine exam paper, is entirely correct & legible, and does not contain confidential personal ID sheets or answer logs.
+            </label>
+          </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            data-testid="submit-upload"
+            className="w-full h-12 bg-[#F97316] text-white border-2 border-black text-xs font-share font-bold rounded-lg hover:bg-[#2563EB] hover:text-white hover:scale-[1.01] hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-60 transition-all cursor-pointer shadow-[3.5px_3.5px_0px_#000] flex items-center justify-center gap-2"
+          >
+            {submitting ? "Uploading Paper..." : "Publish PYQ"} <UploadCloud className="w-4 h-4" />
+          </button>
+        </div>
+      </form>
+
+      <AnimatePresence>
+        {/* ============================================================ */}
+        {/* Confirmation Dialog with Review & Terms & Conditions */}
+        {/* ============================================================ */}
+        {showConfirmModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-xs overflow-y-auto"
+            data-testid="confirmation-dialog-overlay"
+            onClick={() => {
+              if (!submitting) setShowConfirmModal(false);
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.92, y: 20, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.92, y: 20, opacity: 0 }}
+              transition={{ type: "spring", damping: 20, stiffness: 300 }}
+              className="relative w-full max-w-[95vw] sm:max-w-lg bg-[#FAF9F6] border-4 border-black p-4 sm:p-7 rounded-2xl shadow-[6px_6px_0px_#000] sm:shadow-[8px_8px_0px_#000] z-10 text-left my-auto font-share max-h-[90vh] sm:max-h-[92vh] flex flex-col scale-[0.95] origin-center sm:scale-100"
+              data-testid="confirmation-dialog"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between gap-4 mb-4 pb-3 border-b-2 border-black/10 shrink-0">
+                <div>
+                  <span className="inline-flex items-center gap-1.5 bg-amber-200 text-black text-[11px] font-bold px-3 py-1 rounded-full border border-black shadow-[1.5px_1.5px_0px_#000] mb-2 select-none">
+                    ✦ Confirmation & Terms ✦
+                  </span>
+                  <h2 className="text-xl sm:text-2xl font-momo font-bold text-black leading-tight">
+                    Confirm Paper Publication
+                  </h2>
+                  <p className="text-xs text-gray-600 font-medium mt-0.5">
+                    Please review paper details and accept the BPUT upload terms before publishing.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmModal(false)}
+                  disabled={submitting}
+                  className="w-8 h-8 rounded-lg border-2 border-black bg-white hover:bg-red-50 hover:text-red-600 flex items-center justify-center shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                  aria-label="Close dialog"
+                  data-testid="close-confirm-modal"
+                >
+                  <X className="w-4 h-4 stroke-[2.5]" />
+                </button>
+              </div>
+
+              <div className="overflow-y-auto space-y-4 pr-1 flex-1">
+                {/* Summary Card */}
+                <div className="bg-white border-2 border-black rounded-xl p-4 shadow-[3px_3px_0px_#000]">
+                  <div className="flex items-start gap-3 mb-3 pb-2.5 border-b border-gray-100">
+                    <div className="w-10 h-10 rounded-lg bg-amber-100 border-2 border-black flex items-center justify-center shrink-0 shadow-[1.5px_1.5px_0px_#000]">
+                      <FileText className="w-5 h-5 text-black stroke-[2.5]" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">
+                        BPUT Question Paper
+                      </span>
+                      <h3 className="font-momo font-bold text-sm sm:text-base text-black break-words leading-snug">
+                        {form.paper}
+                      </h3>
+                    </div>
+                  </div>
+
+                  {/* Metadata Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                    <div className="bg-stone-50 border border-black/20 rounded-lg p-2">
+                      <span className="text-[10px] font-bold text-gray-500 block">University</span>
+                      <span className="font-black text-black">BPUT Odisha</span>
+                    </div>
+                    <div className="bg-stone-50 border border-black/20 rounded-lg p-2">
+                      <span className="text-[10px] font-bold text-gray-500 block">Branch</span>
+                      <span className="font-black text-[#2563EB]">{formatBranchDisplay(form.branch)}</span>
+                    </div>
+                    <div className="bg-stone-50 border border-black/20 rounded-lg p-2">
+                      <span className="text-[10px] font-bold text-gray-500 block">Semester</span>
+                      <span className="font-black text-black">Sem {form.semester}</span>
+                    </div>
+                    <div className="bg-stone-50 border border-black/20 rounded-lg p-2">
+                      <span className="text-[10px] font-bold text-gray-500 block">Exam Year</span>
+                      <span className="font-black text-black">{form.year}</span>
+                    </div>
+                    <div className="bg-stone-50 border border-black/20 rounded-lg p-2">
+                      <span className="text-[10px] font-bold text-gray-500 block">Exam Type</span>
+                      <span className="font-black text-[#F97316]">{form.exam_type}</span>
+                    </div>
+                    <div className="bg-stone-50 border border-black/20 rounded-lg p-2">
+                      <span className="text-[10px] font-bold text-gray-500 block">Contributor</span>
+                      <span className="font-black text-black truncate block">
+                        {form.uploader_name?.trim() || "Anonymous"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Attached File Preview */}
+                  {file && (
+                    <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-gray-700">
+                      <span className="flex items-center gap-1.5 truncate">
+                        <UploadCloud className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span className="truncate">{file.name}</span>
+                      </span>
+                      <span className="text-[11px] font-mono text-[#F97316] shrink-0 ml-2">
+                        {(file.size / (1024 * 1024)).toFixed(2)} MB
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Terms & Conditions Notice Box */}
+                <div className="bg-amber-50 border-2 border-black rounded-xl p-3.5 shadow-[2.5px_2.5px_0px_#000] text-xs">
+                  <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-black/10">
+                    <ShieldCheck className="w-4 h-4 text-emerald-700 stroke-[2.5]" />
+                    <span className="font-black uppercase tracking-wider text-black text-[11px]">
+                      Terms & Community Guidelines
+                    </span>
+                  </div>
+                  <ul className="space-y-1.5 text-[11px] text-gray-850 font-medium leading-relaxed">
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#F97316] font-bold shrink-0">✦</span>
+                      <span><strong>BPUT Exclusivity:</strong> This paper belongs exclusively to the BPUT University syllabus or an affiliated college examination.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#F97316] font-bold shrink-0">✦</span>
+                      <span><strong>Genuine & Legible:</strong> The paper text, diagrams, and question numbers are authentic, clearly readable, and complete.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#F97316] font-bold shrink-0">✦</span>
+                      <span><strong>Privacy & Compliance:</strong> The document is free of personal student scores, roll numbers, or confidential evaluation markings.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#F97316] font-bold shrink-0">✦</span>
+                      <span><strong>Open Resource:</strong> You agree to provide this resource for free academic use under GetPYQ's <Link to="/terms" target="_blank" className="font-bold text-[#2563EB] underline hover:text-black inline-flex items-center gap-0.5">Terms of Use <ExternalLink className="w-2.5 h-2.5" /></Link> and <Link to="/disclaimer" target="_blank" className="font-bold text-[#2563EB] underline hover:text-black inline-flex items-center gap-0.5">Disclaimer <ExternalLink className="w-2.5 h-2.5" /></Link>.</span>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Checkbox for Explicit Agreement */}
+                <div className="bg-white border-2 border-black p-3.5 rounded-xl flex items-start gap-3 shadow-[2px_2px_0px_#000]">
+                  <input
+                    type="checkbox"
+                    id="confirm-terms-agreement"
+                    checked={termsAccepted}
+                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 shrink-0 rounded accent-[#2563EB] cursor-pointer"
+                    data-testid="modal-terms-checkbox"
+                  />
+                  <label htmlFor="confirm-terms-agreement" className="text-xs font-bold text-black cursor-pointer leading-snug select-none">
+                    I confirm that I have reviewed the details above, accept the Terms & Conditions, and verify that this is an authentic BPUT examination paper.
+                  </label>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-5 pt-3 border-t-2 border-black/10 flex flex-col-reverse sm:flex-row items-center justify-end gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmModal(false)}
+                  disabled={submitting}
+                  data-testid="cancel-publish-btn"
+                  className="w-full sm:w-auto px-5 h-11 bg-white hover:bg-stone-100 text-black border-2 border-black rounded-xl text-xs font-bold shadow-[2.5px_2.5px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  Cancel / Edit Details
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmPublish}
+                  disabled={!termsAccepted || submitting}
+                  data-testid="confirm-publish-btn"
+                  className="w-full sm:w-auto px-6 h-11 bg-[#25D366] hover:bg-[#1fb956] text-black border-2 border-black rounded-xl text-xs font-black shadow-[3px_3px_0px_#000] hover:scale-[1.02] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Publishing Paper...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+                      <span>Confirm & Publish PYQ</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {showSuccess && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-xs select-none">
+            {/* Confetti container relative to center */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden flex items-center justify-center">
+              {confetti.map((p) => (
+                <motion.div
+                  key={p.id}
+                  initial={{ x: 0, y: 150, scale: 0, rotate: 0 }}
+                  animate={{
+                    x: p.tx,
+                    y: p.ty,
+                    scale: [0, 1.3, 1, 0.7, 0],
+                    rotate: p.rotation + 720,
+                  }}
+                  transition={{
+                    duration: 3,
+                    ease: "easeOut",
+                    delay: p.delay,
+                  }}
+                  className="absolute border-2 border-black shadow-[1.5px_1.5px_0px_#000]"
+                  style={{
+                    backgroundColor: p.color,
+                    width: p.size,
+                    height: p.size,
+                    borderRadius: p.shape === "circle" ? "50%" : p.shape === "triangle" ? "0%" : "4px",
+                    clipPath: p.shape === "triangle" ? "polygon(50% 0%, 0% 100%, 100% 100%)" : undefined,
+                  }}
+                />
+              ))}
+            </div>
+
+            {/* Success Dialog */}
+            <motion.div
+              initial={{ scale: 0.8, y: 50, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.9, y: 20, opacity: 0 }}
+              transition={{ type: "spring", damping: 15 }}
+              className="relative w-full max-w-[95vw] sm:max-w-md bg-[#FAF9F6] border-4 border-black p-6 sm:p-8 rounded-2xl shadow-[6px_6px_0px_#000] sm:shadow-[8px_8px_0px_#000] z-10 text-center scale-[0.95] origin-center sm:scale-100"
+            >
+              {/* Super Bouncy Check icon */}
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: [0, 1.3, 1] }}
+                transition={{ delay: 0.15, duration: 0.5, ease: "easeOut" }}
+                className="w-20 h-20 bg-emerald-100 text-emerald-600 border-4 border-black rounded-full mx-auto flex items-center justify-center shadow-[4px_4px_0px_#000] mb-6"
+              >
+                <CheckCircle2 className="w-12 h-12 stroke-[2.5]" />
+              </motion.div>
+
+              <h2 className="font-momo font-bold text-2xl sm:text-3xl text-black mb-2">
+                Published PYQ!
+              </h2>
+              <p className="text-gray-700 font-share font-bold text-xs leading-relaxed mb-6">
+                Thank you for contributing. Your question paper is now recorded in the archives & ready to help candidates.
+              </p>
+
+              {newPaperId && (
+                <div className="mb-5 p-3 bg-blue-50 border-2 border-black rounded-xl shadow-[2px_2px_0px_#000] flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-600">Assigned PYQ ID:</span>
+                  <span className="text-xs font-mono font-black text-[#2563EB] bg-white px-2.5 py-1 border border-black/20 rounded-md">
+                    {newPaperId}
+                  </span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="mt-4 flex flex-col gap-2.5">
+                {newPaperId && (
+                  <Link
+                    to={`/pyq?pyqId=${encodeURIComponent(newPaperId)}`}
+                    data-testid="view-uploaded-pyq-btn"
+                    className="w-full inline-flex items-center justify-center gap-2 bg-[#2563EB] text-white border-2 border-black rounded-xl h-12 px-6 text-sm font-share font-bold shadow-[3.5px_3.5px_0px_#000] hover:bg-[#1d4ed8] hover:scale-[1.01] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer"
+                  >
+                    <Eye className="w-4 h-4 stroke-[2.5]" />
+                    View Uploaded PYQ
+                  </Link>
+                )}
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  data-testid="upload-another-btn"
+                  className="w-full inline-flex items-center justify-center gap-2 bg-[#F97316] text-white border-2 border-black rounded-xl h-12 px-6 text-sm font-share font-bold shadow-[3.5px_3.5px_0px_#000] hover:bg-[#ea580c] hover:scale-[1.01] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer"
+                >
+                  <UploadCloud className="w-4 h-4 stroke-[2.5]" />
+                  Upload Another Paper
+                </button>
+                <Link
+                  to="/"
+                  data-testid="go-to-home-btn"
+                  className="w-full inline-flex items-center justify-center gap-2 bg-white text-black border-2 border-black rounded-xl h-12 px-6 text-sm font-share font-bold shadow-[3.5px_3.5px_0px_#000] hover:bg-stone-100 hover:scale-[1.01] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer"
+                >
+                  <Home className="w-4 h-4 stroke-[2.5]" />
+                  Go to Home
+                </Link>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+interface FieldProps {
+  label: string;
+  children: React.ReactNode;
+}
+
+function Field({ label, children }: FieldProps) {
+  return (
+    <label className="block">
+      <span className="text-[10px] font-share font-bold text-[#F97316] block pl-1 mb-1 leading-none select-none">{label}</span>
+      {children}
+    </label>
+  );
+}

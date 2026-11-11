@@ -1,0 +1,175 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600;1,700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-heading: "Plus Jakarta Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --color-brand-50: #ECFDF5;
+  --color-brand-100: #D1FAE5;
+  --color-brand-200: #A7F3D0;
+  --color-brand-500: #10B981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+  --color-brand-900: #064E3B;
+}
+
+:root {
+  --bg-main: #FAFBFD;
+  --text-main: #0F172A;
+  --border-subtle: rgba(15, 23, 42, 0.08);
+}
+
+body {
+  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: #FAFBFD;
+  color: #0F172A;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+code, kbd, samp, pre {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Ambient glow pattern like jugaadbro.app */
+.ambient-glow {
+  background: 
+    radial-gradient(circle at 15% 15%, rgba(16, 185, 129, 0.06) 0%, transparent 45%),
+    radial-gradient(circle at 85% 25%, rgba(13, 148, 136, 0.05) 0%, transparent 45%),
+    radial-gradient(circle at 50% 85%, rgba(59, 130, 246, 0.04) 0%, transparent 45%);
+}
+
+/* JugaadBro Modern Glass Cards & Controls */
+.jugaad-card {
+  background-color: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 1.25rem;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03), 0 1px 2px -1px rgba(15, 23, 42, 0.03);
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.jugaad-card:hover {
+  border-color: rgba(5, 150, 105, 0.25);
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05), 0 8px 10px -6px rgba(15, 23, 42, 0.03);
+}
+
+.jugaad-card-elevated {
+  background-color: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 1.5rem;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+}
+
+.jugaad-btn-primary {
+  background: linear-gradient(135deg, #059669 0%, #0D9488 100%);
+  color: #ffffff;
+  font-weight: 700;
+  border-radius: 0.875rem;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.jugaad-btn-primary:hover {
+  background: linear-gradient(135deg, #047857 0%, #0f766e 100%);
+  box-shadow: 0 6px 16px rgba(5, 150, 105, 0.35);
+  transform: translateY(-1px);
+}
+
+.jugaad-btn-primary:active {
+  transform: translateY(0);
+}
+
+/* Remove default scrollbar while keeping smooth scrolling */
+html,
+body,
+*,
+*::before,
+*::after {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0px !important;
+  height: 0px !important;
+  background: transparent !important;
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Marquee continuous ticker animation */
+@keyframes marquee-scroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: marquee-scroll 75s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+.animate-marquee-paused {
+  animation-play-state: paused !important;
+}
+
+/* Print Specific Styles for Official Grade Sheet & Class Reports */
+@media print {
+  @page {
+    margin: 6mm 8mm;
+    size: auto;
+  }
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-size: 8.5pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  table {
+    page-break-inside: auto;
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+  thead {
+    display: table-header-group !important;
+  }
+  tr, td, th {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

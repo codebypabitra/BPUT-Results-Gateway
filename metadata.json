@@ -1,0 +1,6 @@
+{
+  "name": "BPUT Results Portal - Live Grade Sheet & Class Evaluation",
+  "description": "High-speed provisional examination results portal for Biju Patnaik University of Technology (BPUT) with live verification, individual marksheet download, and bulk class evaluation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
