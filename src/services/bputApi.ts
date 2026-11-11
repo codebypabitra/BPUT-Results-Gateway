@@ -6,30 +6,66 @@ import {
 } from '../types/bput';
 
 /**
- * Robust fetch wrapper with automatic retry on transient gateway errors or network drops
+ * Robust fetch wrapper with automatic retry on transient gateway errors (502, 503, 504) or network drops
  */
 async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 2): Promise<Response> {
   let lastError: any = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const res = await fetch(url, options);
+
       // If server returned 502/503/504 gateway error, retry after backoff
       if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt < maxRetries) {
-        await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+        await new Promise((r) => setTimeout(r, 450 * (attempt + 1)));
         continue;
       }
       return res;
     } catch (err: any) {
       lastError = err;
       if (attempt < maxRetries) {
-        await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
       }
     }
   }
   throw lastError || new Error(`Network request to ${url} failed`);
 }
 
-export async function checkServerHealth(): Promise<{ status: string; latencyMs: number; statusCode?: number }> {
+/**
+ * Safe JSON parser that catches HTML error pages from Vercel / Cloudflare and yields friendly messages
+ */
+async function parseApiResponse<T>(res: Response, defaultErrorMsg: string): Promise<T> {
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!res.ok) {
+    if (res.status === 504) {
+      throw new Error('BPUT Gateway Timeout: The official examination server took too long to respond. Please retry your query in a few seconds.');
+    }
+    if (res.status === 502 || res.status === 503) {
+      if (json && (json.error || json.message)) {
+        throw new Error(json.error || json.message);
+      }
+      throw new Error('BPUT Gateway Temporary Notice: The official university server is experiencing high traffic or security verification. Please retry in a few moments.');
+    }
+    if (json && (json.error || json.message)) {
+      throw new Error(json.error || json.message);
+    }
+    throw new Error(defaultErrorMsg);
+  }
+
+  if (!json) {
+    throw new Error('Invalid response received from BPUT Gateway.');
+  }
+
+  return json as T;
+}
+
+export async function checkServerHealth(): Promise<{ status: string; latencyMs: number; statusCode?: number; environment?: string }> {
   try {
     const res = await fetch('/api/health');
     if (!res.ok) throw new Error('Health check failed');
@@ -54,12 +90,10 @@ export async function getStudentResultsList(
     }),
   });
 
-  if (!res.ok) {
-    const errorJson = await res.json().catch(() => ({}));
-    throw new Error(errorJson.error || errorJson.details || 'Failed to fetch result list from BPUT gateway');
-  }
-
-  return await res.json();
+  return await parseApiResponse<BputApiResponse<BputResultListItem[]>>(
+    res,
+    'Failed to fetch result list from BPUT gateway'
+  );
 }
 
 export async function getStudentDetails(
@@ -71,12 +105,10 @@ export async function getStudentDetails(
     body: JSON.stringify({ rollNo: rollNo.trim() }),
   });
 
-  if (!res.ok) {
-    const errorJson = await res.json().catch(() => ({}));
-    throw new Error(errorJson.error || errorJson.details || 'Failed to fetch student details');
-  }
-
-  return await res.json();
+  return await parseApiResponse<BputApiResponse<BputStudentDetails | null>>(
+    res,
+    'Failed to fetch student details from BPUT gateway'
+  );
 }
 
 export async function checkBatchResults(
@@ -89,12 +121,10 @@ export async function checkBatchResults(
     body: JSON.stringify({ rollNumbers, session }),
   });
 
-  if (!res.ok) {
-    const errorJson = await res.json().catch(() => ({}));
-    throw new Error(errorJson.error || 'Failed to process bulk batch results');
-  }
-
-  return await res.json();
+  return await parseApiResponse<{ success: boolean; total: number; session: string; results: any[] }>(
+    res,
+    'Failed to process bulk batch results from BPUT gateway'
+  );
 }
 
 export async function getStudentSummary(
@@ -107,12 +137,10 @@ export async function getStudentSummary(
     body: JSON.stringify({ rollNo: rollNo.trim(), session: session.trim() }),
   });
 
-  if (!res.ok) {
-    const errorJson = await res.json().catch(() => ({}));
-    throw new Error(errorJson.error || 'Failed to fetch student result summary');
-  }
-
-  return await res.json();
+  return await parseApiResponse<{ success: boolean; data: any }>(
+    res,
+    'Failed to fetch student result summary from BPUT gateway'
+  );
 }
 
 export async function getStudentMarksAndGrades(
@@ -130,12 +158,10 @@ export async function getStudentMarksAndGrades(
     }),
   });
 
-  if (!res.ok) {
-    const errorJson = await res.json().catch(() => ({}));
-    throw new Error(errorJson.error || errorJson.details || 'Failed to fetch marks and grades');
-  }
-
-  return await res.json();
+  return await parseApiResponse<BputApiResponse<BputMarksData>>(
+    res,
+    'Failed to fetch marks and grades from BPUT gateway'
+  );
 }
 
 export async function getStudentAllSessions(
@@ -161,10 +187,18 @@ export async function getStudentAllSessions(
     }),
   });
 
-  if (!res.ok) {
-    const errorJson = await res.json().catch(() => ({}));
-    throw new Error(errorJson.error || 'Failed to scan all sessions for student');
-  }
-
-  return await res.json();
+  return await parseApiResponse<{
+    success: boolean;
+    rollNo: string;
+    studentDetails?: BputStudentDetails;
+    totalSessionsFound: number;
+    allPublished: Array<{
+      session: string;
+      items: BputResultListItem[];
+      marks?: BputMarksData;
+    }>;
+  }>(
+    res,
+    'Failed to scan all sessions from BPUT gateway'
+  );
 }

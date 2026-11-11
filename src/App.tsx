@@ -520,12 +520,25 @@ export default function App() {
               <h4 className="font-bold text-sm text-rose-950 mb-0.5">Result Query Notice</h4>
               <p className="leading-relaxed text-rose-800 font-medium">{errorMessage}</p>
             </div>
-            <button
-              onClick={() => setErrorMessage(null)}
-              className="text-rose-700 hover:bg-rose-100 rounded-lg text-xs font-bold px-2.5 py-1 cursor-pointer transition-colors"
-            >
-              ✕ Close
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  setErrorMessage(null);
+                  if (activeMode === 'single' && rollNo) {
+                    handleSearch();
+                  }
+                }}
+                className="bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold px-3 py-1 cursor-pointer transition-colors shadow-xs"
+              >
+                Retry
+              </button>
+              <button
+                onClick={() => setErrorMessage(null)}
+                className="text-rose-700 hover:bg-rose-100 rounded-lg text-xs font-bold px-2.5 py-1 cursor-pointer transition-colors"
+              >
+                ✕ Close
+              </button>
+            </div>
           </div>
         )}
 
